@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 # -*- coding: UTF-8 -*-# enable debugging
-
 import json
 import mysql.connector
 from mysql.connector import errorcode
