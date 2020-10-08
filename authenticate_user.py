@@ -1,6 +1,8 @@
 #!/usr/bin/env python3sla
 
 import json
+from base64 import b64encode
+
 import mysql.connector
 from mysql.connector import errorcode
 import cgitb
@@ -15,6 +17,7 @@ debug = True
 def create_user_session(u_id, cursor):
     print("creating user session . . . ")
     token = secrets.token_bytes()
+    token = b64encode(token)
     print(token)
     print(len(token))
     cursor.execute("SELECT s.user_id_fk, s.date, s.session_id from user_session s WHERE s.user_id_fk = %s", (u_id,))
@@ -47,7 +50,7 @@ print("Content-Type: text/html;charset=utf-8\n\n")
 f = open('userconfig.json')
 config = json.load(f)
 try:
-    connection = mysql.connector.connect(**config, auth_plugin='mysql_native_password')
+    connection = mysql.connector.connect(**config, auth_plugin='mysql_native_password', charset='utf8')
 except mysql.connector.Error as err:
     if err.errno == errorcode.ER_ACCESS_DENIED_ERROR:
         print("Something is wrong with your user name or password")
