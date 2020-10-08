@@ -1,10 +1,47 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3sla
+
 import json
 import mysql.connector
 from mysql.connector import errorcode
 import cgitb
 import sys
 import bcrypt
+import secrets
+import datetime
+
+debug = True
+
+
+def create_user_session(u_id, cursor):
+    print("creating user session . . . ")
+    token = secrets.token_bytes()
+    print(token)
+    print(len(token))
+    cursor.execute("SELECT s.user_id_fk, s.date, s.session_id from user_session s WHERE s.user_id_fk = %s", (u_id,))
+    for (user_id, date, session_id) in cursor.fetchall():
+        if date + datetime.timedelta(minutes=30) < datetime.datetime.utcnow():
+            if debug:
+                print("user session expired: ")
+            cursor.execute("DELETE FROM user_session WHERE session_id = %s", (session_id, ))
+    #make sure no clashes occur generating a token id, messy but practical solution
+    while True:
+        try:
+            cursor.execute("INSERT INTO user_session (session_id, user_id_fk, date) VALUES (%s, %s, %s)", (token, u_id, datetime.datetime.utcnow()))
+            #in case we have a token clash, just try to re-calculate a new token
+        except mysql.connector.IntegrityError as err:
+            token = secrets.token_bytes()
+            continue
+        except Exception as err:
+            print(err)
+            print(err.__doc__)
+            print(type(err).__name__)
+            exit(-1)
+        break
+    connection.commit()
+    print("operation successful! printing token. . . ")
+    print(token);
+
+
 cgitb.enable()
 print("Content-Type: text/html;charset=utf-8\n\n")
 f = open('userconfig.json')
@@ -54,17 +91,19 @@ except KeyError as err:
 
 try:
     cursor = connection.cursor()
-    cursor.execute("SELECT u.hash FROM user u where u.name = %s LIMIT 1", (usr_name,))
+    cursor.execute("SELECT u.user_id, u.hash FROM user u where u.name = %s LIMIT 1", (usr_name,))
     usr = cursor.fetchone()
     if usr is None:
         print("user not found!")
         #todo implement this
         exit(-1)
     else:
-        usr = str.encode(''.join(usr))
-        print(usr)
-        if bcrypt.checkpw(usr_pass, usr) is True:
+        (u_id, u_hash) = usr
+        u_hash = str.encode(''.join(u_hash))
+        print(u_hash)
+        if bcrypt.checkpw(usr_pass, u_hash) is True:
             print("user authenticated!")
+            create_user_session(u_id, cursor)
         else:
             print("password wrong!")
 except mysql.connector.IntegrityError as err:
@@ -80,3 +119,5 @@ except mysql.connector.IntegrityError as err:
 #     exit(-1)
 
 connection.close()
+
+
