@@ -1,8 +1,7 @@
-#!/usr/bin/env python3sla
+#!/usr/bin/env python3
 
 import json
 from base64 import b64encode
-
 import mysql.connector
 from mysql.connector import errorcode
 import cgitb
@@ -10,21 +9,20 @@ import sys
 import bcrypt
 import secrets
 import datetime
-
 debug = True
 
+authentication_response_dict = {
+    "status": 400,
+    "session_id": None,
+    "description": "default"
+}
 
 def create_user_session(u_id, cursor):
-    print("creating user session . . . ")
     token = secrets.token_bytes()
     token = b64encode(token)
-    print(token)
-    print(len(token))
     cursor.execute("SELECT s.user_id_fk, s.date, s.session_id from user_session s WHERE s.user_id_fk = %s", (u_id,))
     for (user_id, date, session_id) in cursor.fetchall():
         if date + datetime.timedelta(minutes=30) < datetime.datetime.utcnow():
-            if debug:
-                print("user session expired: ")
             cursor.execute("DELETE FROM user_session WHERE session_id = %s", (session_id, ))
     #make sure no clashes occur generating a token id, messy but practical solution
     while True:
@@ -32,7 +30,7 @@ def create_user_session(u_id, cursor):
             cursor.execute("INSERT INTO user_session (session_id, user_id_fk, date) VALUES (%s, %s, %s)", (token, u_id, datetime.datetime.utcnow()))
             #in case we have a token clash, just try to re-calculate a new token
         except mysql.connector.IntegrityError as err:
-            token = secrets.token_bytes()
+            token = b64encode(secrets.token_bytes());
             continue
         except Exception as err:
             print(err)
@@ -41,10 +39,10 @@ def create_user_session(u_id, cursor):
             exit(-1)
         break
     connection.commit()
-    print("operation successful! printing token. . . ")
-    print(token);
-
-
+    authentication_response_dict['session_id'] = token.decode('utf-8')
+    authentication_response_dict['status'] = 200
+    authentication_response_dict['description'] = ""
+    print(json.dumps(authentication_response_dict))
 cgitb.enable()
 print("Content-Type: text/html;charset=utf-8\n\n")
 f = open('userconfig.json')
@@ -59,7 +57,7 @@ except mysql.connector.Error as err:
     else:
         print(err)
 else:
-    print("successfully connected!")
+    # print("successfully connected!")
     '''print("content length is : " + os.environ['CONTENT_LENGTH'])
     if int(os.environ['CONTENT_LENGTH']) > 250:
         print("Status: 400 Bad Request\n")
@@ -70,45 +68,52 @@ usr_name = usr_pass = None
 try:
     a = sys.stdin.read()
     if not a:
-        print("Status: 400 Bad Request\n")
-        print("no content body received")
-        exit(-1)
-    print(a)
+        authentication_response_dict['description'] = "no body in GET request"
+        #print("Status: 400 Bad Request\n")
+        #print("no content body received")
+        print(json.dumps(authentication_response_dict))
+        exit()
     user = json.loads(a)
     usr_name = str.encode(user['username'])
     usr_pass = str.encode(user['password'])
     if not usr_pass or not usr_name:
-        print("Status: 400 Bad Request\n")
-        print("no user name given: " + a)
-        exit(-1)
+        #print("Status: 400 Bad Request\n")
+        authentication_response_dict['description'] = "no user name / password given"
+        print(json.dumps(authentication_response_dict))
+        exit()
 except json.JSONDecodeError as err:
-    print("Status: 400 Bad Request\n")
-    print("Invalid json in request: "+a)
-    print(err)
-    exit(-1)
+    #print("Status: 400 Bad Request\n")
+    authentication_response_dict['description'] = "Invalid JSON in request"
+    print(json.dumps(authentication_response_dict))
+    #print(err)
+    exit()
 except KeyError as err:
-    print("Status: 400 Bad Request\n")
-    print("Invalid json in request: " + a)
-    print(err)
-    exit(-1)
+    #print("Status: 400 Bad Request\n")
+    authentication_response_dict['description'] = "Invalid JSON in request"
+    print(json.dumps(authentication_response_dict))
+    #print(err)
+    exit()
 
 try:
     cursor = connection.cursor()
     cursor.execute("SELECT u.user_id, u.hash FROM user u where u.name = %s LIMIT 1", (usr_name,))
     usr = cursor.fetchone()
     if usr is None:
-        print("user not found!")
+        authentication_response_dict['status'] = 401
+        authentication_response_dict['description'] = "username not found"
+        print(json.dumps(authentication_response_dict))
+        #print("user not found!")
         #todo implement this
-        exit(-1)
+        exit()
     else:
         (u_id, u_hash) = usr
         u_hash = str.encode(''.join(u_hash))
-        print(u_hash)
         if bcrypt.checkpw(usr_pass, u_hash) is True:
-            print("user authenticated!")
             create_user_session(u_id, cursor)
         else:
-            print("password wrong!")
+            authentication_response_dict['status'] = 401
+            authentication_response_dict['description'] = "invalid password"
+            print(json.dumps(authentication_response_dict))
 except mysql.connector.IntegrityError as err:
 
     print(err)
