@@ -10,48 +10,19 @@ import bcrypt
 import secrets
 import datetime
 import http.cookies as cookie
+import os
 debug = True
 
-authentication_response_dict = {
-    "status": 400,
-    "session_id": None,
-    "description": "default"
+subscriptions_response_dict= {
+    "status": 401,
+    "description": "session id cookie not found"
 }
-
-def create_user_session(u_id, cursor):
-    token = secrets.token_bytes()
-    token = b64encode(token)
-    cursor.execute("SELECT s.user_id_fk, s.date, s.session_id from user_session s WHERE s.user_id_fk = %s", (u_id,))
-    for (user_id, date, session_id) in cursor.fetchall():
-        if date + datetime.timedelta(minutes=30) < datetime.datetime.utcnow():
-            cursor.execute("DELETE FROM user_session WHERE session_id = %s", (session_id, ))
-    #make sure no clashes occur generating a token id, messy but practical solution
-    while True:
-        try:
-            cursor.execute("INSERT INTO user_session (session_id, user_id_fk, date) VALUES (%s, %s, %s)", (token, u_id, datetime.datetime.utcnow()))
-            #in case we have a token clash, just try to re-calculate a new token
-        except mysql.connector.IntegrityError as err:
-            token = b64encode(secrets.token_bytes());
-            continue
-        except Exception as err:
-            print(err)
-            print(err.__doc__)
-            print(type(err).__name__)
-            exit(-1)
-        break
-    connection.commit()
-    authentication_response_dict['session_id'] = token.decode('utf-8')
-    authentication_response_dict['status'] = 200
-    authentication_response_dict['description'] = ""
-    respCookie = cookie.SimpleCookie()
-    respCookie['DBWS-g3-auth'] = token.decode('utf-8')
-    expiration_date = datetime.datetime.utcnow() + datetime.timedelta(minutes=30)
-    respCookie['DBWS-g3-auth']['expires'] = expiration_date.strftime("%a, %d %b %Y %H:%M:%S UTC")
-    print(respCookie)
-    #respCookie['DBWS-g3-auth']['domain'] = ".app.localhost"
+if 'HTTP_COOKIE' not in os.environ.keys():
     print("Content-Type: text/html;charset=utf-8\n\n")
-    print(json.dumps(authentication_response_dict))
-cgitb.enable(display=0, logdir="./logs");
+    print(json.dumps(subscriptions_response_dict))
+    exit()
+
+
 
 f = open('userconfig.json')
 config = json.load(f)
