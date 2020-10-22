@@ -43,10 +43,6 @@ def handleRequestCookie(mysql_connection):
     #try to see if user session is authenticated
     try:
         cursor = mysql_connection.cursor()
-        cursor.execute("SELECT s.user_id_fk, s.session_id FROM user_session s")
-        for stuff in cursor.fetchall():
-            print(stuff)
-            print('<br>')
         row_count = cursor.execute('SELECT s.user_id_fk, s.date, s.session_id FROM user_session s WHERE s.session_id = %s', (auth_cookie.value,))
 
         if row_count is 0:
@@ -82,3 +78,4 @@ f = open('userconfig.json')
 config = json.load(f)
 connection = mysql.connector.connect(**config, auth_plugin='mysql_native_password', charset='utf8')
 print(handleRequestCookie(connection))
+connection.commit();
