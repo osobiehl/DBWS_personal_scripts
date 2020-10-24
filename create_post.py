@@ -14,10 +14,17 @@ from email.mime import multipart
 from email.mime import nonmultipart
 from email.mime import text
 # TODO add error handling on input JSON
+
+
+
 cgitb.enable()
 print("Content-Type: text/html;charset=utf-8\n\n")
 a = sys.stdin.read()
 req_content = json.loads(a)
+
+if 'title' and 'content' and 'image-type' and 'image' not in req_content:
+    print("invalid! ")
+
 img_b64 = req_content['image']
 img = b64decode(img_b64)
 req_content['image'] = None
